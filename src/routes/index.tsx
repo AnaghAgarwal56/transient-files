@@ -71,7 +71,7 @@ function Landing() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="secondary">
-                <Link to="/create" search={{ shared: true }}>
+                <Link to="/create">
                   Create Shared Room
                 </Link>
               </Button>
