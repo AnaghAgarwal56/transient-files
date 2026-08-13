@@ -14,7 +14,242 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      activity_logs: {
+        Row: {
+          action: string
+          actor_name: string
+          created_at: string
+          id: string
+          participant_id: string | null
+          transfer_id: string
+        }
+        Insert: {
+          action: string
+          actor_name?: string
+          created_at?: string
+          id?: string
+          participant_id?: string | null
+          transfer_id: string
+        }
+        Update: {
+          action?: string
+          actor_name?: string
+          created_at?: string
+          id?: string
+          participant_id?: string | null
+          transfer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_logs_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deletion_confirmations: {
+        Row: {
+          confirmed: boolean
+          confirmed_at: string
+          id: string
+          participant_id: string
+          transfer_id: string
+        }
+        Insert: {
+          confirmed?: boolean
+          confirmed_at?: string
+          id?: string
+          participant_id: string
+          transfer_id: string
+        }
+        Update: {
+          confirmed?: boolean
+          confirmed_at?: string
+          id?: string
+          participant_id?: string
+          transfer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deletion_confirmations_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deletion_confirmations_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      files: {
+        Row: {
+          filename: string
+          id: string
+          mime_type: string
+          ready: boolean
+          size: number
+          storage_path: string
+          transfer_id: string
+          uploaded_at: string
+          uploaded_by: string | null
+          uploaded_by_name: string
+        }
+        Insert: {
+          filename: string
+          id?: string
+          mime_type?: string
+          ready?: boolean
+          size?: number
+          storage_path: string
+          transfer_id: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+          uploaded_by_name?: string
+        }
+        Update: {
+          filename?: string
+          id?: string
+          mime_type?: string
+          ready?: boolean
+          size?: number
+          storage_path?: string
+          transfer_id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+          uploaded_by_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "files_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "transfers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      participants: {
+        Row: {
+          display_name: string
+          id: string
+          joined_at: string
+          last_active: string
+          revoked: boolean
+          role: string
+          token_hash: string
+          transfer_id: string
+        }
+        Insert: {
+          display_name: string
+          id?: string
+          joined_at?: string
+          last_active?: string
+          revoked?: boolean
+          role?: string
+          token_hash: string
+          transfer_id: string
+        }
+        Update: {
+          display_name?: string
+          id?: string
+          joined_at?: string
+          last_active?: string
+          revoked?: boolean
+          role?: string
+          token_hash?: string
+          transfer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "participants_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transfers: {
+        Row: {
+          created_at: string
+          delete_permission: string
+          deleted_at: string | null
+          deletion_at: string | null
+          download_permission: string
+          expires_at: string
+          failed_attempts: number
+          id: string
+          locked_until: string | null
+          max_users: number
+          name: string | null
+          pin_hash: string
+          pin_salt: string
+          retention_minutes: number
+          room_id: string
+          status: string
+          upload_permission: string
+        }
+        Insert: {
+          created_at?: string
+          delete_permission?: string
+          deleted_at?: string | null
+          deletion_at?: string | null
+          download_permission?: string
+          expires_at: string
+          failed_attempts?: number
+          id?: string
+          locked_until?: string | null
+          max_users?: number
+          name?: string | null
+          pin_hash: string
+          pin_salt: string
+          retention_minutes?: number
+          room_id: string
+          status?: string
+          upload_permission?: string
+        }
+        Update: {
+          created_at?: string
+          delete_permission?: string
+          deleted_at?: string | null
+          deletion_at?: string | null
+          download_permission?: string
+          expires_at?: string
+          failed_attempts?: number
+          id?: string
+          locked_until?: string | null
+          max_users?: number
+          name?: string | null
+          pin_hash?: string
+          pin_salt?: string
+          retention_minutes?: number
+          room_id?: string
+          status?: string
+          upload_permission?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
