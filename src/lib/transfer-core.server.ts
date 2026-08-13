@@ -135,7 +135,7 @@ export async function createTransfer(input: CreateInput) {
         delete_permission: (["owner", "anyone", "confirm"] as string[]).includes(
           input.deletePolicy ?? "",
         )
-          ? input.deletePolicy
+          ? (input.deletePolicy as string)
           : "owner",
         retention_minutes: retention,
         expires_at: new Date(Date.now() + expiryMinutes * 60_000).toISOString(),
@@ -605,12 +605,16 @@ export async function updateSettings(args: {
   if (participant.role !== "owner") {
     throw new TransferError("forbidden", "Only the room owner can change room settings.");
   }
-  const patch: Record<string, string> = {};
-  if (args.upload === "owner" || args.upload === "everyone") patch["upload_permission"] = args.upload;
+  const patch: {
+    upload_permission?: string;
+    download_permission?: string;
+    delete_permission?: string;
+  } = {};
+  if (args.upload === "owner" || args.upload === "everyone") patch.upload_permission = args.upload;
   if (args.download === "owner" || args.download === "everyone")
-    patch["download_permission"] = args.download;
+    patch.download_permission = args.download;
   if (args.deletePolicy && ["owner", "anyone", "confirm"].includes(args.deletePolicy))
-    patch["delete_permission"] = args.deletePolicy;
+    patch.delete_permission = args.deletePolicy;
   if (Object.keys(patch).length === 0) return { ok: true };
 
   await client.from("transfers").update(patch).eq("id", transfer.id);
