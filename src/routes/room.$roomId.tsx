@@ -124,9 +124,10 @@ function RoomPage() {
 
   const state = query.data;
   const invalidate = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ["room", roomId] }),
+    () => queryClient.refetchQueries({ queryKey: ["room", roomId] }),
     [queryClient, roomId],
   );
+
 
   const [remaining, setRemaining] = useState(0);
   useEffect(() => {
