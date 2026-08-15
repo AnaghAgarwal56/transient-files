@@ -124,9 +124,10 @@ function RoomPage() {
 
   const state = query.data;
   const invalidate = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ["room", roomId] }),
+    () => queryClient.refetchQueries({ queryKey: ["room", roomId] }),
     [queryClient, roomId],
   );
+
 
   const [remaining, setRemaining] = useState(0);
   useEffect(() => {
@@ -738,7 +739,7 @@ function Blocked({
       <p className="mt-2 text-sm text-muted-foreground">{body}</p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
         <Button asChild>
-          <Link to={action.to === "/join" ? "/join" : "/create"} search={action.to === "/join" ? {} : undefined}>
+          <Link to={action.to}>
             {action.label}
           </Link>
         </Button>
