@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CreateRouteImport } from './routes/create'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as JoinRouteImport } from './routes/join'
+import { Route as RoomRoomIdRouteImport } from './routes/room.$roomId'
+import { Route as ApiPublicHooksCleanupRouteImport } from './routes/api/public/hooks/cleanup'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +36,32 @@ const JoinRoute = JoinRouteImport.update({
   path: '/join',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoomRoomIdRoute = RoomRoomIdRouteImport.update({
+  id: '/room/$roomId',
+  path: '/room/$roomId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicHooksCleanupRoute = ApiPublicHooksCleanupRouteImport.update({
+  id: '/api/public/hooks/cleanup',
+  path: '/api/public/hooks/cleanup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/join': typeof JoinRoute
+  '/room/$roomId': typeof RoomRoomIdRoute
+  '/api/public/hooks/cleanup': typeof ApiPublicHooksCleanupRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/join': typeof JoinRoute
+  '/room/$roomId': typeof RoomRoomIdRoute
+  '/api/public/hooks/cleanup': typeof ApiPublicHooksCleanupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +69,34 @@ export interface FileRoutesById {
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/join': typeof JoinRoute
+  '/room/$roomId': typeof RoomRoomIdRoute
+  '/api/public/hooks/cleanup': typeof ApiPublicHooksCleanupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/create' | '/how-it-works' | '/join'
+  fullPaths:
+    | '/'
+    | '/create'
+    | '/how-it-works'
+    | '/join'
+    | '/room/$roomId'
+    | '/api/public/hooks/cleanup'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/create' | '/how-it-works' | '/join'
-  id: '__root__' | '/' | '/create' | '/how-it-works' | '/join'
+  to:
+    | '/'
+    | '/create'
+    | '/how-it-works'
+    | '/join'
+    | '/room/$roomId'
+    | '/api/public/hooks/cleanup'
+  id:
+    | '__root__'
+    | '/'
+    | '/create'
+    | '/how-it-works'
+    | '/join'
+    | '/room/$roomId'
+    | '/api/public/hooks/cleanup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +104,8 @@ export interface RootRouteChildren {
   CreateRoute: typeof CreateRoute
   HowItWorksRoute: typeof HowItWorksRoute
   JoinRoute: typeof JoinRoute
+  RoomRoomIdRoute: typeof RoomRoomIdRoute
+  ApiPublicHooksCleanupRoute: typeof ApiPublicHooksCleanupRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +138,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JoinRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/room/$roomId': {
+      id: '/room/$roomId'
+      path: '/room/$roomId'
+      fullPath: '/room/$roomId'
+      preLoaderRoute: typeof RoomRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/cleanup': {
+      id: '/api/public/hooks/cleanup'
+      path: '/api/public/hooks/cleanup'
+      fullPath: '/api/public/hooks/cleanup'
+      preLoaderRoute: typeof ApiPublicHooksCleanupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +160,8 @@ const rootRouteChildren: RootRouteChildren = {
   CreateRoute: CreateRoute,
   HowItWorksRoute: HowItWorksRoute,
   JoinRoute: JoinRoute,
+  RoomRoomIdRoute: RoomRoomIdRoute,
+  ApiPublicHooksCleanupRoute: ApiPublicHooksCleanupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
