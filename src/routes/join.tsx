@@ -27,9 +27,11 @@ export const Route = createFileRoute("/join")({
       },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>) => ({
-    room: typeof search["room"] === "string" ? search["room"].toUpperCase().slice(0, 12) : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { room?: string } =>
+    typeof search["room"] === "string"
+      ? { room: search["room"].toUpperCase().slice(0, 12) }
+      : {},
+
   component: JoinPage,
 });
 
