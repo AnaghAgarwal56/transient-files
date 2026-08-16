@@ -190,9 +190,139 @@ export type Database = {
           },
         ]
       }
-      transfers: {
+      payment_orders: {
+        Row: {
+          amount_paise: number
+          created_at: string
+          id: string
+          plan_id: string | null
+          provider: string
+          provider_order_id: string
+          provider_payment_id: string | null
+          purpose: string
+          status: string
+          updated_at: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          amount_paise: number
+          created_at?: string
+          id?: string
+          plan_id?: string | null
+          provider?: string
+          provider_order_id: string
+          provider_payment_id?: string | null
+          purpose: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          amount_paise?: number
+          created_at?: string
+          id?: string
+          plan_id?: string | null
+          provider?: string
+          provider_order_id?: string
+          provider_payment_id?: string | null
+          purpose?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
         Row: {
           created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      transfer_credits: {
+        Row: {
+          bytes_total: number
+          bytes_used: number
+          created_at: string
+          id: string
+          label: string
+          max_duration_minutes: number
+          max_participants: number
+          paid_with: string
+          plan_id: string
+          price_paise: number
+          status: string
+          transfer_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bytes_total: number
+          bytes_used?: number
+          created_at?: string
+          id?: string
+          label: string
+          max_duration_minutes?: number
+          max_participants?: number
+          paid_with?: string
+          plan_id: string
+          price_paise: number
+          status?: string
+          transfer_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bytes_total?: number
+          bytes_used?: number
+          created_at?: string
+          id?: string
+          label?: string
+          max_duration_minutes?: number
+          max_participants?: number
+          paid_with?: string
+          plan_id?: string
+          price_paise?: number
+          status?: string
+          transfer_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfer_credits_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transfers: {
+        Row: {
+          capacity_bytes: number
+          created_at: string
+          credit_id: string | null
           delete_permission: string
           deleted_at: string | null
           deletion_at: string | null
@@ -203,15 +333,20 @@ export type Database = {
           locked_until: string | null
           max_users: number
           name: string | null
+          owner_user_id: string | null
           pin_hash: string
           pin_salt: string
           retention_minutes: number
           room_id: string
           status: string
+          tier: string
           upload_permission: string
+          used_bytes: number
         }
         Insert: {
+          capacity_bytes?: number
           created_at?: string
+          credit_id?: string | null
           delete_permission?: string
           deleted_at?: string | null
           deletion_at?: string | null
@@ -222,15 +357,20 @@ export type Database = {
           locked_until?: string | null
           max_users?: number
           name?: string | null
+          owner_user_id?: string | null
           pin_hash: string
           pin_salt: string
           retention_minutes?: number
           room_id: string
           status?: string
+          tier?: string
           upload_permission?: string
+          used_bytes?: number
         }
         Update: {
+          capacity_bytes?: number
           created_at?: string
+          credit_id?: string | null
           delete_permission?: string
           deleted_at?: string | null
           deletion_at?: string | null
@@ -241,12 +381,77 @@ export type Database = {
           locked_until?: string | null
           max_users?: number
           name?: string | null
+          owner_user_id?: string | null
           pin_hash?: string
           pin_salt?: string
           retention_minutes?: number
           room_id?: string
           status?: string
+          tier?: string
           upload_permission?: string
+          used_bytes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfers_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: false
+            referencedRelation: "transfer_credits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_transactions: {
+        Row: {
+          amount_paise: number
+          balance_after_paise: number
+          created_at: string
+          description: string
+          id: string
+          kind: string
+          reference: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_paise: number
+          balance_after_paise: number
+          created_at?: string
+          description?: string
+          id?: string
+          kind: string
+          reference?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_paise?: number
+          balance_after_paise?: number
+          created_at?: string
+          description?: string
+          id?: string
+          kind?: string
+          reference?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wallets: {
+        Row: {
+          balance_paise: number
+          created_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance_paise?: number
+          created_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance_paise?: number
+          created_at?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -255,7 +460,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      consume_transfer_capacity: {
+        Args: { _bytes: number; _transfer_id: string }
+        Returns: number
+      }
+      wallet_credit: {
+        Args: {
+          _amount_paise: number
+          _description: string
+          _kind: string
+          _reference: string
+          _user_id: string
+        }
+        Returns: number
+      }
+      wallet_debit: {
+        Args: {
+          _amount_paise: number
+          _description: string
+          _reference: string
+          _user_id: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
