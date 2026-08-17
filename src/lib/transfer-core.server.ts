@@ -517,7 +517,28 @@ export async function requestUpload(args: {
     throw new TransferError("invalid_file", "That file appears to be empty.");
   }
   if (size > MAX_FILE_BYTES) {
-    throw new TransferError("file_too_large", "Files must be 200 MB or smaller in this version.");
+    throw new TransferError(
+      "file_too_large",
+      `Single files must be ${Math.round(MAX_FILE_BYTES / (1024 * 1024 * 1024))} GB or smaller.`,
+    );
+  }
+  const remaining = Math.max(0, Number(transfer.capacity_bytes) - Number(transfer.used_bytes));
+  if (size > remaining) {
+    throw new TransferError(
+      "capacity_exceeded",
+      `This room has ${formatSize(remaining)} of transfer capacity left. Buy more capacity to send bigger files.`,
+    );
+  }
+  // Reserve capacity atomically before handing out an upload URL.
+  const { error: capErr } = await client.rpc("consume_transfer_capacity", {
+    _transfer_id: transfer.id,
+    _bytes: size,
+  });
+  if (capErr) {
+    throw new TransferError(
+      "capacity_exceeded",
+      "This room does not have enough transfer capacity left for that file.",
+    );
   }
   const ext = fileExtension(filename);
   if (BLOCKED_EXTENSIONS.includes(ext)) {
