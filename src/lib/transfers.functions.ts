@@ -1,37 +1,56 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { DeletePolicy, Permission, RoomState } from "./transfer-types";
 
 type Fail = { ok: false; code: string; message: string };
 type Ok<T> = { ok: true; data: T };
 export type Result<T> = Ok<T> | Fail;
 
+export interface CreatedRoom {
+  roomId: string;
+  pin: string;
+  token: string;
+  displayName: string;
+  expiresAt: string;
+  shareUrl: string;
+  tier: string;
+  capacityBytes: number;
+}
+
+interface CreateArgs {
+  name?: string;
+  expiryMinutes: number;
+  maxUsers: number;
+  displayName?: string;
+  upload?: Permission;
+  download?: Permission;
+  deletePolicy?: DeletePolicy;
+  retentionMinutes?: number;
+  origin: string;
+}
+
+/** Free room: 200 MB capacity, 10 hours, 2 participants (enforced server-side). */
 export const createTransferFn = createServerFn({ method: "POST" })
-  .inputValidator(
-    (input: {
-      name?: string;
-      expiryMinutes: number;
-      maxUsers: number;
-      displayName?: string;
-      upload?: Permission;
-      download?: Permission;
-      deletePolicy?: DeletePolicy;
-      retentionMinutes?: number;
-      origin: string;
-    }) => input,
-  )
+  .inputValidator((input: CreateArgs) => input)
   .handler(async ({ data }) => {
     const { runAction } = await import("./transfer-core.dispatch.server");
-    return runAction("create", data) as Promise<
-      Result<{
-        roomId: string;
-        pin: string;
-        token: string;
-        displayName: string;
-        expiresAt: string;
-        shareUrl: string;
-      }>
+    return runAction("create", { ...data, creditId: undefined, ownerUserId: undefined }) as Promise<
+      Result<CreatedRoom>
     >;
+  });
+
+/** Paid room: consumes one purchased transfer pack owned by the signed-in user. */
+export const createPaidTransferFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: CreateArgs & { creditId: string }) => input)
+  .handler(async ({ data, context }) => {
+    const { runAction } = await import("./transfer-core.dispatch.server");
+    return runAction("create", {
+      ...data,
+      creditId: data.creditId,
+      ownerUserId: context.userId,
+    }) as Promise<Result<CreatedRoom>>;
   });
 
 export const joinTransferFn = createServerFn({ method: "POST" })
