@@ -9,11 +9,15 @@ import {
   type RoomState,
   type RoomStatus,
 } from "./transfer-types";
+import { FREE_PLAN } from "./pricing";
 
 const BUCKET = "transfer-files";
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_PIN_ATTEMPTS = 5;
 const LOCK_MINUTES = 10;
+const FREE_MAX_TRANSFER_BYTES = FREE_PLAN.maxTransferBytes;
+const FREE_MAX_PARTICIPANTS = FREE_PLAN.maxParticipants;
+const FREE_LIFETIME_MINUTES = FREE_PLAN.lifetimeMinutes;
 
 type Db = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
 
@@ -100,19 +104,61 @@ export interface CreateInput {
   deletePolicy?: DeletePolicy;
   retentionMinutes?: number;
   origin: string;
+  /** Present when the room is created by a signed-in account. */
+  ownerUserId?: string;
+  /** A purchased transfer pack to attach to this room. */
+  creditId?: string;
 }
 
-const ALLOWED_EXPIRY = [30, 60, 240, 720, 1440];
-const ALLOWED_MAX_USERS = [1, 2, 5, 10];
+const ALLOWED_EXPIRY = [30, 60, 240, 600, 1440, 4320, 10080];
 const ALLOWED_RETENTION = [60, 360, 1440, 4320];
+
+interface CreditRow {
+  id: string;
+  label: string;
+  bytes_total: number;
+  bytes_used: number;
+  max_participants: number;
+  max_duration_minutes: number;
+  status: string;
+}
 
 export async function createTransfer(input: CreateInput) {
   const client = await db();
-  const expiryMinutes = ALLOWED_EXPIRY.includes(input.expiryMinutes) ? input.expiryMinutes : 240;
-  const maxUsers = ALLOWED_MAX_USERS.includes(input.maxUsers) ? input.maxUsers : 2;
+
+  // Resolve the paid pack (if any) server-side — the client never decides capacity.
+  let credit: CreditRow | null = null;
+  if (input.creditId) {
+    if (!input.ownerUserId) {
+      throw new TransferError("unauthorized", "Sign in to use a purchased transfer.");
+    }
+    const { data } = await client
+      .from("transfer_credits")
+      .select("id, label, bytes_total, bytes_used, max_participants, max_duration_minutes, status")
+      .eq("id", input.creditId)
+      .eq("user_id", input.ownerUserId)
+      .maybeSingle();
+    if (!data) throw new TransferError("not_found", "That purchased transfer could not be found.");
+    if (data.status !== "unused") {
+      throw new TransferError("credit_used", "That transfer has already been used for a room.");
+    }
+    credit = data as CreditRow;
+  }
+
+  const capacityBytes = credit
+    ? Math.max(0, Number(credit.bytes_total) - Number(credit.bytes_used))
+    : FREE_MAX_TRANSFER_BYTES;
+  const maxParticipants = credit ? credit.max_participants : FREE_MAX_PARTICIPANTS;
+  const maxLifetime = credit ? credit.max_duration_minutes : FREE_LIFETIME_MINUTES;
+
+  const requestedExpiry = ALLOWED_EXPIRY.includes(input.expiryMinutes) ? input.expiryMinutes : 240;
+  const expiryMinutes = Math.min(requestedExpiry, maxLifetime);
+  const requestedUsers = Number.isInteger(input.maxUsers) ? input.maxUsers : 2;
+  const maxUsers = Math.min(Math.max(1, requestedUsers), maxParticipants);
   const retention = ALLOWED_RETENTION.includes(input.retentionMinutes ?? 1440)
     ? (input.retentionMinutes ?? 1440)
     : 1440;
+
 
   const pin = randomCode(4, "0123456789");
   const salt = toHex(randomBytes(16));
@@ -139,6 +185,11 @@ export async function createTransfer(input: CreateInput) {
           : "owner",
         retention_minutes: retention,
         expires_at: new Date(Date.now() + expiryMinutes * 60_000).toISOString(),
+        owner_user_id: input.ownerUserId ?? null,
+        credit_id: credit?.id ?? null,
+        tier: credit ? credit.label : "free",
+        capacity_bytes: capacityBytes,
+        used_bytes: 0,
       })
       .select("id, expires_at")
       .single();
@@ -148,6 +199,21 @@ export async function createTransfer(input: CreateInput) {
     }
   }
   if (!inserted) throw new TransferError("server_error", "Could not create the transfer.");
+
+  if (credit) {
+    // Claim the pack exactly once: only an unused credit can be attached.
+    const { data: claimed } = await client
+      .from("transfer_credits")
+      .update({ status: "active", transfer_id: inserted.id })
+      .eq("id", credit.id)
+      .eq("status", "unused")
+      .select("id")
+      .maybeSingle();
+    if (!claimed) {
+      await client.from("transfers").delete().eq("id", inserted.id);
+      throw new TransferError("credit_used", "That transfer has already been used for a room.");
+    }
+  }
 
   const displayName = sanitizeName(input.displayName, tempName());
   const token = randomToken();
@@ -172,6 +238,8 @@ export async function createTransfer(input: CreateInput) {
     displayName,
     expiresAt: inserted.expires_at,
     shareUrl: `${input.origin}/join?room=${roomId}`,
+    tier: credit ? credit.label : "free",
+    capacityBytes,
   };
 }
 
@@ -208,6 +276,37 @@ interface TransferRow {
   deletion_at: string | null;
   failed_attempts: number;
   locked_until: string | null;
+  tier: string;
+  capacity_bytes: number;
+  used_bytes: number;
+  credit_id: string | null;
+  owner_user_id: string | null;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+/** Returns reserved-but-unused capacity to the room (and its pack). */
+async function releaseCapacity(transferId: string, creditId: string | null, bytes: number) {
+  if (bytes <= 0) return;
+  const client = await db();
+  const { data } = await client
+    .from("transfers")
+    .select("used_bytes")
+    .eq("id", transferId)
+    .maybeSingle();
+  const used = Math.max(0, Number(data?.used_bytes ?? 0) - bytes);
+  await client.from("transfers").update({ used_bytes: used }).eq("id", transferId);
+  if (creditId) await client.from("transfer_credits").update({ bytes_used: used }).eq("id", creditId);
 }
 
 interface ParticipantRow {
@@ -387,6 +486,9 @@ export async function getRoomState(token: string): Promise<RoomState> {
     deletionAt: transfer.deletion_at,
     maxUsers: transfer.max_users,
     retentionMinutes: transfer.retention_minutes,
+    tier: transfer.tier,
+    capacityBytes: Number(transfer.capacity_bytes),
+    usedBytes: Number(transfer.used_bytes),
     settings: {
       upload: transfer.upload_permission as Permission,
       download: transfer.download_permission as Permission,
@@ -449,7 +551,28 @@ export async function requestUpload(args: {
     throw new TransferError("invalid_file", "That file appears to be empty.");
   }
   if (size > MAX_FILE_BYTES) {
-    throw new TransferError("file_too_large", "Files must be 200 MB or smaller in this version.");
+    throw new TransferError(
+      "file_too_large",
+      `Single files must be ${Math.round(MAX_FILE_BYTES / (1024 * 1024 * 1024))} GB or smaller.`,
+    );
+  }
+  const remaining = Math.max(0, Number(transfer.capacity_bytes) - Number(transfer.used_bytes));
+  if (size > remaining) {
+    throw new TransferError(
+      "capacity_exceeded",
+      `This room has ${formatSize(remaining)} of transfer capacity left. Buy more capacity to send bigger files.`,
+    );
+  }
+  // Reserve capacity atomically before handing out an upload URL.
+  const { error: capErr } = await client.rpc("consume_transfer_capacity", {
+    _transfer_id: transfer.id,
+    _bytes: size,
+  });
+  if (capErr) {
+    throw new TransferError(
+      "capacity_exceeded",
+      "This room does not have enough transfer capacity left for that file.",
+    );
   }
   const ext = fileExtension(filename);
   if (BLOCKED_EXTENSIONS.includes(ext)) {
@@ -474,12 +597,19 @@ export async function requestUpload(args: {
     })
     .select("id")
     .single();
-  if (error || !file) throw new TransferError("upload_failed", "Could not start the upload.");
+  if (error || !file) {
+    await releaseCapacity(transfer.id, transfer.credit_id, size);
+    throw new TransferError("upload_failed", "Could not start the upload.");
+  }
 
   const { data: signed, error: sErr } = await client.storage
     .from(BUCKET)
     .createSignedUploadUrl(storagePath);
-  if (sErr || !signed) throw new TransferError("upload_failed", "Could not start the upload.");
+  if (sErr || !signed) {
+    await client.from("files").delete().eq("id", file.id);
+    await releaseCapacity(transfer.id, transfer.credit_id, size);
+    throw new TransferError("upload_failed", "Could not start the upload.");
+  }
 
   return { fileId: file.id, uploadUrl: signed.signedUrl, filename };
 }
@@ -496,6 +626,7 @@ export async function finalizeUpload(args: { token: string; fileId: string }) {
   if (!file || file.uploaded_by !== participant.id) {
     throw new TransferError("upload_failed", "That upload could not be verified.");
   }
+  const reserved = Number(file.size);
 
   const dir = file.storage_path.split("/").slice(0, -1).join("/");
   const name = file.storage_path.split("/").pop()!;
@@ -503,17 +634,25 @@ export async function finalizeUpload(args: { token: string; fileId: string }) {
   const object = listed?.[0];
   if (!object) {
     await client.from("files").delete().eq("id", file.id);
+    await releaseCapacity(transfer.id, transfer.credit_id, reserved);
     throw new TransferError("upload_failed", "The upload did not complete. Please try again.");
   }
-  const actualSize = Number(
-    (object.metadata as { size?: number } | null)?.size ?? file.size,
-  );
-  if (actualSize > MAX_FILE_BYTES) {
+  const actualSize = Number((object.metadata as { size?: number } | null)?.size ?? file.size);
+  const capacityLeft = Number(transfer.capacity_bytes) - Number(transfer.used_bytes) + reserved;
+  if (actualSize > MAX_FILE_BYTES || actualSize > capacityLeft) {
     await client.storage.from(BUCKET).remove([file.storage_path]);
     await client.from("files").delete().eq("id", file.id);
-    throw new TransferError("file_too_large", "Files must be 200 MB or smaller in this version.");
+    await releaseCapacity(transfer.id, transfer.credit_id, reserved);
+    throw new TransferError(
+      "capacity_exceeded",
+      "That file is larger than the transfer capacity left in this room.",
+    );
   }
 
+  // Settle the reservation against the real object size.
+  if (actualSize !== reserved) {
+    await releaseCapacity(transfer.id, transfer.credit_id, reserved - actualSize);
+  }
   await client.from("files").update({ ready: true, size: actualSize }).eq("id", file.id);
   await log(transfer.id, participant.display_name, `uploaded ${file.filename}`, participant.id);
   return { ok: true };

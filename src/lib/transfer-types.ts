@@ -1,6 +1,8 @@
 // Client-safe shared types & constants for DataTransfer.
 
-export const MAX_FILE_BYTES = 200 * 1024 * 1024; // 200 MB per file
+// Hard per-file ceiling. A room's own transfer capacity (free 200 MB, or the
+// purchased pack) is what actually limits most uploads.
+export const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB per file
 
 export const BLOCKED_EXTENSIONS = [
   "exe",
@@ -79,6 +81,10 @@ export interface RoomState {
   deletionAt: string | null;
   maxUsers: number;
   retentionMinutes: number;
+  /** "free" or the purchased pack label, e.g. "5 GB". */
+  tier: string;
+  capacityBytes: number;
+  usedBytes: number;
   settings: {
     upload: Permission;
     download: Permission;
