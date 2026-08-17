@@ -486,6 +486,9 @@ export async function getRoomState(token: string): Promise<RoomState> {
     deletionAt: transfer.deletion_at,
     maxUsers: transfer.max_users,
     retentionMinutes: transfer.retention_minutes,
+    tier: transfer.tier,
+    capacityBytes: Number(transfer.capacity_bytes),
+    usedBytes: Number(transfer.used_bytes),
     settings: {
       upload: transfer.upload_permission as Permission,
       download: transfer.download_permission as Permission,
