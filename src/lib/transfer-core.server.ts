@@ -9,11 +9,15 @@ import {
   type RoomState,
   type RoomStatus,
 } from "./transfer-types";
+import { FREE_PLAN } from "./pricing";
 
 const BUCKET = "transfer-files";
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_PIN_ATTEMPTS = 5;
 const LOCK_MINUTES = 10;
+const FREE_MAX_TRANSFER_BYTES = FREE_PLAN.maxTransferBytes;
+const FREE_MAX_PARTICIPANTS = FREE_PLAN.maxParticipants;
+const FREE_LIFETIME_MINUTES = FREE_PLAN.lifetimeMinutes;
 
 type Db = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
 
