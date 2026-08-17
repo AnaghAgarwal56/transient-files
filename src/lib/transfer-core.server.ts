@@ -185,6 +185,11 @@ export async function createTransfer(input: CreateInput) {
           : "owner",
         retention_minutes: retention,
         expires_at: new Date(Date.now() + expiryMinutes * 60_000).toISOString(),
+        owner_user_id: input.ownerUserId ?? null,
+        credit_id: credit?.id ?? null,
+        tier: credit ? credit.label : "free",
+        capacity_bytes: capacityBytes,
+        used_bytes: 0,
       })
       .select("id, expires_at")
       .single();
@@ -194,6 +199,21 @@ export async function createTransfer(input: CreateInput) {
     }
   }
   if (!inserted) throw new TransferError("server_error", "Could not create the transfer.");
+
+  if (credit) {
+    // Claim the pack exactly once: only an unused credit can be attached.
+    const { data: claimed } = await client
+      .from("transfer_credits")
+      .update({ status: "active", transfer_id: inserted.id })
+      .eq("id", credit.id)
+      .eq("status", "unused")
+      .select("id")
+      .maybeSingle();
+    if (!claimed) {
+      await client.from("transfers").delete().eq("id", inserted.id);
+      throw new TransferError("credit_used", "That transfer has already been used for a room.");
+    }
+  }
 
   const displayName = sanitizeName(input.displayName, tempName());
   const token = randomToken();
@@ -218,6 +238,8 @@ export async function createTransfer(input: CreateInput) {
     displayName,
     expiresAt: inserted.expires_at,
     shareUrl: `${input.origin}/join?room=${roomId}`,
+    tier: credit ? credit.label : "free",
+    capacityBytes,
   };
 }
 
