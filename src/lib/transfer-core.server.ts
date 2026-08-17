@@ -276,6 +276,37 @@ interface TransferRow {
   deletion_at: string | null;
   failed_attempts: number;
   locked_until: string | null;
+  tier: string;
+  capacity_bytes: number;
+  used_bytes: number;
+  credit_id: string | null;
+  owner_user_id: string | null;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+/** Returns reserved-but-unused capacity to the room (and its pack). */
+async function releaseCapacity(transferId: string, creditId: string | null, bytes: number) {
+  if (bytes <= 0) return;
+  const client = await db();
+  const { data } = await client
+    .from("transfers")
+    .select("used_bytes")
+    .eq("id", transferId)
+    .maybeSingle();
+  const used = Math.max(0, Number(data?.used_bytes ?? 0) - bytes);
+  await client.from("transfers").update({ used_bytes: used }).eq("id", transferId);
+  if (creditId) await client.from("transfer_credits").update({ bytes_used: used }).eq("id", creditId);
 }
 
 interface ParticipantRow {
