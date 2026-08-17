@@ -330,16 +330,9 @@ async function grantCredit(
   const pack = findPack(planId);
   if (!pack) throw new BillingError("invalid_plan", "That transfer pack is not available.");
 
-  // Idempotency: one credit per payment reference.
-  const { data: existing } = await client
-    .from("transfer_credits")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("plan_id", pack.id)
-    .eq("status", "unused")
-    .contains("label", pack.label)
-    .limit(0);
-  void existing;
+  // Callers claim the payment/ledger reference before calling this, so a
+  // successful call here happens at most once per payment.
+
 
   const { data, error } = await client
     .from("transfer_credits")
