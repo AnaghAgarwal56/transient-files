@@ -81,6 +81,10 @@ export interface RoomState {
   deletionAt: string | null;
   maxUsers: number;
   retentionMinutes: number;
+  /** "free" or the purchased pack label, e.g. "5 GB". */
+  tier: string;
+  capacityBytes: number;
+  usedBytes: number;
   settings: {
     upload: Permission;
     download: Permission;
