@@ -594,12 +594,19 @@ export async function requestUpload(args: {
     })
     .select("id")
     .single();
-  if (error || !file) throw new TransferError("upload_failed", "Could not start the upload.");
+  if (error || !file) {
+    await releaseCapacity(transfer.id, transfer.credit_id, size);
+    throw new TransferError("upload_failed", "Could not start the upload.");
+  }
 
   const { data: signed, error: sErr } = await client.storage
     .from(BUCKET)
     .createSignedUploadUrl(storagePath);
-  if (sErr || !signed) throw new TransferError("upload_failed", "Could not start the upload.");
+  if (sErr || !signed) {
+    await client.from("files").delete().eq("id", file.id);
+    await releaseCapacity(transfer.id, transfer.credit_id, size);
+    throw new TransferError("upload_failed", "Could not start the upload.");
+  }
 
   return { fileId: file.id, uploadUrl: signed.signedUrl, filename };
 }
@@ -616,6 +623,7 @@ export async function finalizeUpload(args: { token: string; fileId: string }) {
   if (!file || file.uploaded_by !== participant.id) {
     throw new TransferError("upload_failed", "That upload could not be verified.");
   }
+  const reserved = Number(file.size);
 
   const dir = file.storage_path.split("/").slice(0, -1).join("/");
   const name = file.storage_path.split("/").pop()!;
@@ -623,17 +631,25 @@ export async function finalizeUpload(args: { token: string; fileId: string }) {
   const object = listed?.[0];
   if (!object) {
     await client.from("files").delete().eq("id", file.id);
+    await releaseCapacity(transfer.id, transfer.credit_id, reserved);
     throw new TransferError("upload_failed", "The upload did not complete. Please try again.");
   }
-  const actualSize = Number(
-    (object.metadata as { size?: number } | null)?.size ?? file.size,
-  );
-  if (actualSize > MAX_FILE_BYTES) {
+  const actualSize = Number((object.metadata as { size?: number } | null)?.size ?? file.size);
+  const capacityLeft = Number(transfer.capacity_bytes) - Number(transfer.used_bytes) + reserved;
+  if (actualSize > MAX_FILE_BYTES || actualSize > capacityLeft) {
     await client.storage.from(BUCKET).remove([file.storage_path]);
     await client.from("files").delete().eq("id", file.id);
-    throw new TransferError("file_too_large", "Files must be 200 MB or smaller in this version.");
+    await releaseCapacity(transfer.id, transfer.credit_id, reserved);
+    throw new TransferError(
+      "capacity_exceeded",
+      "That file is larger than the transfer capacity left in this room.",
+    );
   }
 
+  // Settle the reservation against the real object size.
+  if (actualSize !== reserved) {
+    await releaseCapacity(transfer.id, transfer.credit_id, reserved - actualSize);
+  }
   await client.from("files").update({ ready: true, size: actualSize }).eq("id", file.id);
   await log(transfer.id, participant.display_name, `uploaded ${file.filename}`, participant.id);
   return { ok: true };
