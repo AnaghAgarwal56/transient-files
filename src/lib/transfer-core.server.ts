@@ -100,19 +100,61 @@ export interface CreateInput {
   deletePolicy?: DeletePolicy;
   retentionMinutes?: number;
   origin: string;
+  /** Present when the room is created by a signed-in account. */
+  ownerUserId?: string;
+  /** A purchased transfer pack to attach to this room. */
+  creditId?: string;
 }
 
-const ALLOWED_EXPIRY = [30, 60, 240, 720, 1440];
-const ALLOWED_MAX_USERS = [1, 2, 5, 10];
+const ALLOWED_EXPIRY = [30, 60, 240, 600, 1440, 4320, 10080];
 const ALLOWED_RETENTION = [60, 360, 1440, 4320];
+
+interface CreditRow {
+  id: string;
+  label: string;
+  bytes_total: number;
+  bytes_used: number;
+  max_participants: number;
+  max_duration_minutes: number;
+  status: string;
+}
 
 export async function createTransfer(input: CreateInput) {
   const client = await db();
-  const expiryMinutes = ALLOWED_EXPIRY.includes(input.expiryMinutes) ? input.expiryMinutes : 240;
-  const maxUsers = ALLOWED_MAX_USERS.includes(input.maxUsers) ? input.maxUsers : 2;
+
+  // Resolve the paid pack (if any) server-side — the client never decides capacity.
+  let credit: CreditRow | null = null;
+  if (input.creditId) {
+    if (!input.ownerUserId) {
+      throw new TransferError("unauthorized", "Sign in to use a purchased transfer.");
+    }
+    const { data } = await client
+      .from("transfer_credits")
+      .select("id, label, bytes_total, bytes_used, max_participants, max_duration_minutes, status")
+      .eq("id", input.creditId)
+      .eq("user_id", input.ownerUserId)
+      .maybeSingle();
+    if (!data) throw new TransferError("not_found", "That purchased transfer could not be found.");
+    if (data.status !== "unused") {
+      throw new TransferError("credit_used", "That transfer has already been used for a room.");
+    }
+    credit = data as CreditRow;
+  }
+
+  const capacityBytes = credit
+    ? Math.max(0, Number(credit.bytes_total) - Number(credit.bytes_used))
+    : FREE_MAX_TRANSFER_BYTES;
+  const maxParticipants = credit ? credit.max_participants : FREE_MAX_PARTICIPANTS;
+  const maxLifetime = credit ? credit.max_duration_minutes : FREE_LIFETIME_MINUTES;
+
+  const requestedExpiry = ALLOWED_EXPIRY.includes(input.expiryMinutes) ? input.expiryMinutes : 240;
+  const expiryMinutes = Math.min(requestedExpiry, maxLifetime);
+  const requestedUsers = Number.isInteger(input.maxUsers) ? input.maxUsers : 2;
+  const maxUsers = Math.min(Math.max(1, requestedUsers), maxParticipants);
   const retention = ALLOWED_RETENTION.includes(input.retentionMinutes ?? 1440)
     ? (input.retentionMinutes ?? 1440)
     : 1440;
+
 
   const pin = randomCode(4, "0123456789");
   const salt = toHex(randomBytes(16));
