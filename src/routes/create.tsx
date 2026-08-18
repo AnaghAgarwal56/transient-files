@@ -152,6 +152,29 @@ function CreatePage() {
         No account, no email. You&apos;ll get a room ID, an access PIN and a QR code.
       </p>
 
+      {selectedCredit ? (
+        <div className="panel mt-6 flex flex-wrap items-center gap-3 p-4 text-sm">
+          <StatusBadge tone="downloading">{selectedCredit.label} pack</StatusBadge>
+          <span className="text-muted-foreground">
+            {formatBytes(selectedCredit.bytesTotal - selectedCredit.bytesUsed)} capacity · up to{" "}
+            {selectedCredit.maxParticipants} participants
+          </span>
+          <Link to="/create" search={{}} className="ml-auto text-primary hover:underline">
+            Use free plan instead
+          </Link>
+        </div>
+      ) : (
+        <div className="panel mt-6 flex flex-wrap items-center gap-3 p-4 text-sm">
+          <StatusBadge tone="active">Free plan</StatusBadge>
+          <span className="text-muted-foreground">
+            200 MB · 10 hours · 2 participants. Need more?{" "}
+            <Link to="/pricing" className="text-primary hover:underline">
+              Packs from {formatInr(900)}
+            </Link>
+          </span>
+        </div>
+      )}
+
       <form
         className="panel mt-8 space-y-6 p-6"
         onSubmit={(event) => {
