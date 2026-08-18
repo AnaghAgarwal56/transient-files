@@ -18,16 +18,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { saveSession } from "@/lib/session";
+import { useAuth } from "@/hooks/useAuth";
+import { getBillingOverviewFn } from "@/lib/billing.functions";
+import { PAID_DURATIONS, formatInr } from "@/lib/pricing";
+import { useQuery } from "@tanstack/react-query";
 import {
   EXPIRY_OPTIONS,
   MAX_USER_OPTIONS,
+  formatBytes,
   formatCountdown,
   type DeletePolicy,
   type Permission,
 } from "@/lib/transfer-types";
-import { createTransferFn } from "@/lib/transfers.functions";
+import { createPaidTransferFn, createTransferFn } from "@/lib/transfers.functions";
 
 export const Route = createFileRoute("/create")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    credit: typeof search['credit'] === "string" ? (search['credit'] as string) : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Create a Transfer — DataTransfer" },
@@ -41,6 +49,8 @@ export const Route = createFileRoute("/create")({
         property: "og:description",
         content: "Generate a temporary room ID, access PIN and QR code in one tap. No account needed.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: CreatePage,
