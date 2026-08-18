@@ -189,8 +189,8 @@ function WalletPage() {
                         credit.status === "unused"
                           ? "active"
                           : credit.status === "active"
-                            ? "warning"
-                            : "muted"
+                            ? "uploading"
+                            : "expired"
                       }
                     >
                       {credit.status === "unused"
