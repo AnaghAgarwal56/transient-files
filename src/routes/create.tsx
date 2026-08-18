@@ -208,7 +208,7 @@ function CreatePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {EXPIRY_OPTIONS.map((option) => (
+                {expiryChoices.map((option) => (
                   <SelectItem key={option.minutes} value={String(option.minutes)}>
                     {option.label}
                   </SelectItem>
@@ -222,7 +222,7 @@ function CreatePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {MAX_USER_OPTIONS.map((option) => (
+                {userChoices.map((option) => (
                   <SelectItem key={option} value={String(option)}>
                     {option} {option === 1 ? "device (just me)" : "devices"}
                   </SelectItem>
