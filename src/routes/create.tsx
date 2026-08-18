@@ -18,16 +18,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { saveSession } from "@/lib/session";
+import { useAuth } from "@/hooks/useAuth";
+import { getBillingOverviewFn } from "@/lib/billing.functions";
+import { PAID_DURATIONS, formatInr } from "@/lib/pricing";
+import { useQuery } from "@tanstack/react-query";
 import {
   EXPIRY_OPTIONS,
   MAX_USER_OPTIONS,
+  formatBytes,
   formatCountdown,
   type DeletePolicy,
   type Permission,
 } from "@/lib/transfer-types";
-import { createTransferFn } from "@/lib/transfers.functions";
+import { createPaidTransferFn, createTransferFn } from "@/lib/transfers.functions";
 
 export const Route = createFileRoute("/create")({
+  validateSearch: (search: Record<string, unknown>): { credit?: string } =>
+    typeof search['credit'] === "string" ? { credit: search['credit'] } : {},
   head: () => ({
     meta: [
       { title: "Create a Transfer — DataTransfer" },
@@ -41,6 +48,8 @@ export const Route = createFileRoute("/create")({
         property: "og:description",
         content: "Generate a temporary room ID, access PIN and QR code in one tap. No account needed.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: CreatePage,
@@ -53,11 +62,17 @@ interface Created {
   displayName: string;
   expiresAt: string;
   shareUrl: string;
+  tier: string;
+  capacityBytes: number;
 }
 
 function CreatePage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
+  const { signedIn } = useAuth();
   const createFn = useServerFn(createTransferFn);
+  const createPaidFn = useServerFn(createPaidTransferFn);
+  const overviewFn = useServerFn(getBillingOverviewFn);
   const [created, setCreated] = useState<Created | null>(null);
 
   const [name, setName] = useState("");
@@ -70,21 +85,42 @@ function CreatePage() {
   const [retentionMinutes, setRetentionMinutes] = useState(1440);
   const [advanced, setAdvanced] = useState(false);
 
+  const { data: billing } = useQuery({
+    queryKey: ["billing"],
+    queryFn: () => overviewFn({ data: undefined as never }),
+    enabled: signedIn,
+  });
+  const credits = billing?.ok
+    ? billing.data.credits.filter((credit) => credit.status === "unused")
+    : [];
+  const selectedCredit = search.credit
+    ? credits.find((credit) => credit.id === search.credit)
+    : undefined;
+
+  const expiryChoices = selectedCredit
+    ? PAID_DURATIONS.filter((option) => option.minutes <= selectedCredit.maxDurationMinutes)
+    : EXPIRY_OPTIONS;
+  const userChoices = selectedCredit
+    ? [2, 5, 10, 20].filter((n) => n <= selectedCredit.maxParticipants)
+    : MAX_USER_OPTIONS;
+
   const mutation = useMutation({
-    mutationFn: async () =>
-      createFn({
-        data: {
-          name,
-          displayName,
-          expiryMinutes,
-          maxUsers,
-          upload,
-          download,
-          deletePolicy,
-          retentionMinutes,
-          origin: window.location.origin,
-        },
-      }),
+    mutationFn: async () => {
+      const payload = {
+        name,
+        displayName,
+        expiryMinutes,
+        maxUsers,
+        upload,
+        download,
+        deletePolicy,
+        retentionMinutes,
+        origin: window.location.origin,
+      };
+      return selectedCredit
+        ? createPaidFn({ data: { ...payload, creditId: selectedCredit.id } })
+        : createFn({ data: payload });
+    },
     onSuccess: (result) => {
       if (!result.ok) {
         toast.error(result.message);
@@ -99,6 +135,16 @@ function CreatePage() {
     },
     onError: () => toast.error("Network error — could not reach the server."),
   });
+
+  // Keep the form within whatever the active plan allows.
+  useEffect(() => {
+    if (!expiryChoices.some((option) => option.minutes === expiryMinutes)) {
+      setExpiryMinutes(expiryChoices[0]?.minutes ?? 240);
+    }
+    if (!userChoices.includes(maxUsers)) setMaxUsers(userChoices[0] ?? 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCredit?.id]);
+
 
   if (created) {
     return (
@@ -115,6 +161,29 @@ function CreatePage() {
       <p className="mt-2 text-sm text-muted-foreground">
         No account, no email. You&apos;ll get a room ID, an access PIN and a QR code.
       </p>
+
+      {selectedCredit ? (
+        <div className="panel mt-6 flex flex-wrap items-center gap-3 p-4 text-sm">
+          <StatusBadge tone="downloading">{selectedCredit.label} pack</StatusBadge>
+          <span className="text-muted-foreground">
+            {formatBytes(selectedCredit.bytesTotal - selectedCredit.bytesUsed)} capacity · up to{" "}
+            {selectedCredit.maxParticipants} participants
+          </span>
+          <Link to="/create" search={{}} className="ml-auto text-primary hover:underline">
+            Use free plan instead
+          </Link>
+        </div>
+      ) : (
+        <div className="panel mt-6 flex flex-wrap items-center gap-3 p-4 text-sm">
+          <StatusBadge tone="active">Free plan</StatusBadge>
+          <span className="text-muted-foreground">
+            200 MB · 10 hours · 2 participants. Need more?{" "}
+            <Link to="/pricing" className="text-primary hover:underline">
+              Packs from {formatInr(900)}
+            </Link>
+          </span>
+        </div>
+      )}
 
       <form
         className="panel mt-8 space-y-6 p-6"
@@ -149,7 +218,7 @@ function CreatePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {EXPIRY_OPTIONS.map((option) => (
+                {expiryChoices.map((option) => (
                   <SelectItem key={option.minutes} value={String(option.minutes)}>
                     {option.label}
                   </SelectItem>
@@ -163,7 +232,7 @@ function CreatePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {MAX_USER_OPTIONS.map((option) => (
+                {userChoices.map((option) => (
                   <SelectItem key={option} value={String(option)}>
                     {option} {option === 1 ? "device (just me)" : "devices"}
                   </SelectItem>
