@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CreateRouteImport } from './routes/create'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as JoinRouteImport } from './routes/join'
+import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as AuthenticatedWalletRouteImport } from './routes/_authenticated/wallet'
 import { Route as RoomRoomIdRouteImport } from './routes/room.$roomId'
 import { Route as ApiPublicHooksCleanupRouteImport } from './routes/api/public/hooks/cleanup'
@@ -48,6 +49,11 @@ const JoinRoute = JoinRouteImport.update({
   path: '/join',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedWalletRoute = AuthenticatedWalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/join': typeof JoinRoute
+  '/pricing': typeof PricingRoute
   '/wallet': typeof AuthenticatedWalletRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/api/public/hooks/cleanup': typeof ApiPublicHooksCleanupRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/join': typeof JoinRoute
+  '/pricing': typeof PricingRoute
   '/wallet': typeof AuthenticatedWalletRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/api/public/hooks/cleanup': typeof ApiPublicHooksCleanupRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/join': typeof JoinRoute
+  '/pricing': typeof PricingRoute
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute
   '/room/$roomId': typeof RoomRoomIdRoute
   '/api/public/hooks/cleanup': typeof ApiPublicHooksCleanupRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/how-it-works'
     | '/join'
+    | '/pricing'
     | '/wallet'
     | '/room/$roomId'
     | '/api/public/hooks/cleanup'
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/how-it-works'
     | '/join'
+    | '/pricing'
     | '/wallet'
     | '/room/$roomId'
     | '/api/public/hooks/cleanup'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/how-it-works'
     | '/join'
+    | '/pricing'
     | '/_authenticated/wallet'
     | '/room/$roomId'
     | '/api/public/hooks/cleanup'
@@ -137,6 +149,7 @@ export interface RootRouteChildren {
   CreateRoute: typeof CreateRoute
   HowItWorksRoute: typeof HowItWorksRoute
   JoinRoute: typeof JoinRoute
+  PricingRoute: typeof PricingRoute
   RoomRoomIdRoute: typeof RoomRoomIdRoute
   ApiPublicHooksCleanupRoute: typeof ApiPublicHooksCleanupRoute
 }
@@ -185,6 +198,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JoinRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/wallet': {
       id: '/_authenticated/wallet'
       path: '/wallet'
@@ -227,6 +247,7 @@ const rootRouteChildren: RootRouteChildren = {
   CreateRoute: CreateRoute,
   HowItWorksRoute: HowItWorksRoute,
   JoinRoute: JoinRoute,
+  PricingRoute: PricingRoute,
   RoomRoomIdRoute: RoomRoomIdRoute,
   ApiPublicHooksCleanupRoute: ApiPublicHooksCleanupRoute,
 }
