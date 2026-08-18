@@ -33,9 +33,8 @@ import {
 import { createPaidTransferFn, createTransferFn } from "@/lib/transfers.functions";
 
 export const Route = createFileRoute("/create")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    credit: typeof search['credit'] === "string" ? (search['credit'] as string) : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { credit?: string } =>
+    typeof search['credit'] === "string" ? { credit: search['credit'] } : {},
   head: () => ({
     meta: [
       { title: "Create a Transfer — DataTransfer" },
