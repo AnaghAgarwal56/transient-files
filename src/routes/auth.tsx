@@ -67,11 +67,11 @@ function AuthPage() {
   }
 
   async function google() {
-    try {
-      await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + "/auth" });
-    } catch {
-      toast.error("Google sign-in is unavailable right now.");
-    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth` },
+    });
+    if (error) toast.error("Google sign-in is unavailable right now.");
   }
 
   return (
