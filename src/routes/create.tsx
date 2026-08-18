@@ -136,6 +136,16 @@ function CreatePage() {
     onError: () => toast.error("Network error — could not reach the server."),
   });
 
+  // Keep the form within whatever the active plan allows.
+  useEffect(() => {
+    if (!expiryChoices.some((option) => option.minutes === expiryMinutes)) {
+      setExpiryMinutes(expiryChoices[0]?.minutes ?? 240);
+    }
+    if (!userChoices.includes(maxUsers)) setMaxUsers(userChoices[0] ?? 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCredit?.id]);
+
+
   if (created) {
     return (
       <CreatedPanel
