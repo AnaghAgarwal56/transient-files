@@ -62,11 +62,17 @@ interface Created {
   displayName: string;
   expiresAt: string;
   shareUrl: string;
+  tier: string;
+  capacityBytes: number;
 }
 
 function CreatePage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
+  const { signedIn } = useAuth();
   const createFn = useServerFn(createTransferFn);
+  const createPaidFn = useServerFn(createPaidTransferFn);
+  const overviewFn = useServerFn(getBillingOverviewFn);
   const [created, setCreated] = useState<Created | null>(null);
 
   const [name, setName] = useState("");
@@ -79,21 +85,42 @@ function CreatePage() {
   const [retentionMinutes, setRetentionMinutes] = useState(1440);
   const [advanced, setAdvanced] = useState(false);
 
+  const { data: billing } = useQuery({
+    queryKey: ["billing"],
+    queryFn: () => overviewFn({ data: undefined as never }),
+    enabled: signedIn,
+  });
+  const credits = billing?.ok
+    ? billing.data.credits.filter((credit) => credit.status === "unused")
+    : [];
+  const selectedCredit = search.credit
+    ? credits.find((credit) => credit.id === search.credit)
+    : undefined;
+
+  const expiryChoices = selectedCredit
+    ? PAID_DURATIONS.filter((option) => option.minutes <= selectedCredit.maxDurationMinutes)
+    : EXPIRY_OPTIONS;
+  const userChoices = selectedCredit
+    ? [2, 5, 10, 20].filter((n) => n <= selectedCredit.maxParticipants)
+    : MAX_USER_OPTIONS;
+
   const mutation = useMutation({
-    mutationFn: async () =>
-      createFn({
-        data: {
-          name,
-          displayName,
-          expiryMinutes,
-          maxUsers,
-          upload,
-          download,
-          deletePolicy,
-          retentionMinutes,
-          origin: window.location.origin,
-        },
-      }),
+    mutationFn: async () => {
+      const payload = {
+        name,
+        displayName,
+        expiryMinutes,
+        maxUsers,
+        upload,
+        download,
+        deletePolicy,
+        retentionMinutes,
+        origin: window.location.origin,
+      };
+      return selectedCredit
+        ? createPaidFn({ data: { ...payload, creditId: selectedCredit.id } })
+        : createFn({ data: payload });
+    },
     onSuccess: (result) => {
       if (!result.ok) {
         toast.error(result.message);
