@@ -70,3 +70,19 @@ export const buyPackWithWalletFn = createServerFn({ method: "POST" })
       }),
     );
   });
+
+/** Records that a checkout was cancelled by the user or failed at the bank. */
+export const closePaymentOrderFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { orderId: string; outcome: "cancelled" | "failed"; reason?: string }) => input)
+  .handler(async ({ data, context }) => {
+    const { closeOrder } = await import("./billing.server");
+    return guard(() =>
+      closeOrder({
+        userId: context.userId,
+        orderId: data.orderId,
+        outcome: data.outcome === "failed" ? "failed" : "cancelled",
+        ...(data.reason ? { reason: data.reason } : {}),
+      }),
+    );
+  });

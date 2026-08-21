@@ -63,7 +63,11 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/** Coarse per-user rate limit backed by the orders table. */
+/**
+ * Coarse per-user rate limit backed by the orders table. Orders the user
+ * explicitly cancelled don't count, so backing out of checkout never blocks
+ * an immediate retry.
+ */
 async function assertNotFlooding(userId: string) {
   const client = await db();
   const since = new Date(Date.now() - 60_000).toISOString();
@@ -71,10 +75,40 @@ async function assertNotFlooding(userId: string) {
     .from("payment_orders")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
+    .neq("status", "cancelled")
     .gte("created_at", since);
   if ((count ?? 0) >= 8) {
     throw new BillingError("rate_limited", "Too many payment attempts. Please wait a minute.");
   }
+}
+
+/**
+ * Closes out an order the user cancelled or that failed at the bank. Purely
+ * bookkeeping: nothing was credited and no capacity was ever reserved, so this
+ * only moves the row out of "created" and leaves an audit trail.
+ */
+export async function closeOrder(args: {
+  userId: string;
+  orderId: string;
+  outcome: "cancelled" | "failed";
+  reason?: string;
+}) {
+  const client = await db();
+  if (!/^[\w-]{6,64}$/.test(args.orderId)) {
+    throw new BillingError("invalid_payment", "That payment reference is not valid.");
+  }
+  const { data } = await client
+    .from("payment_orders")
+    .update({ status: args.outcome })
+    .eq("provider_order_id", args.orderId)
+    .eq("user_id", args.userId)
+    .eq("status", "created")
+    .select("id, purpose")
+    .maybeSingle();
+  if (args.reason) {
+    console.info("[billing] order %s %s: %s", args.orderId, args.outcome, args.reason.slice(0, 200));
+  }
+  return { closed: Boolean(data), outcome: args.outcome };
 }
 
 async function ensureWallet(userId: string) {
