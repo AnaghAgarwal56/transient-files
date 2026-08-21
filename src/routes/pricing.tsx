@@ -7,22 +7,19 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
+import { PaymentProblemBanner } from "@/components/PaymentProblemBanner";
 import { useAuth } from "@/hooks/useAuth";
+import { usePayment } from "@/hooks/usePayment";
 import {
   FREE_PLAN,
   TRANSFER_PACKS,
   WALLET_TOPUPS,
   formatInr,
+  findPack,
   type TransferPack,
 } from "@/lib/pricing";
 import { formatBytes } from "@/lib/transfer-types";
-import {
-  buyPackWithWalletFn,
-  createPaymentOrderFn,
-  getBillingOverviewFn,
-  verifyPaymentFn,
-} from "@/lib/billing.functions";
-import { openCheckout } from "@/lib/razorpay";
+import { buyPackWithWalletFn, getBillingOverviewFn } from "@/lib/billing.functions";
 
 export const Route = createFileRoute("/pricing")({
   head: () => ({
@@ -50,9 +47,8 @@ function PricingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const overviewFn = useServerFn(getBillingOverviewFn);
-  const orderFn = useServerFn(createPaymentOrderFn);
-  const verifyFn = useServerFn(verifyPaymentFn);
   const walletBuyFn = useServerFn(buyPackWithWalletFn);
+  const { pay, problem, clearProblem } = usePayment();
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data: billing } = useQuery({
@@ -63,31 +59,22 @@ function PricingPage() {
   const balancePaise = billing?.ok ? billing.data.balancePaise : 0;
 
   const payDirect = useMutation({
-    mutationFn: async (pack: TransferPack) => {
-      const order = await orderFn({ data: { purpose: "pack", planId: pack.id } });
-      if (!order.ok) throw new Error(order.message);
-      const result = await openCheckout({
-        keyId: order.data.keyId,
-        orderId: order.data.orderId,
-        amountPaise: order.data.amountPaise,
-        description: order.data.description,
-      });
-      if (!result) return null;
-      const verified = await verifyFn({
-        data: { orderId: result.orderId, paymentId: result.paymentId, signature: result.signature },
-      });
-      if (!verified.ok) throw new Error(verified.message);
-      return verified.data;
-    },
+    mutationFn: (pack: TransferPack) => pay({ purpose: "pack", planId: pack.id }),
+    onSettled: () => setPendingId(null),
     onSuccess: (result) => {
-      setPendingId(null);
-      if (!result) return;
+      if (result.status === "cancelled") {
+        toast.info("Payment cancelled. You were not charged.");
+        return;
+      }
+      if (result.status === "failed") {
+        toast.error(result.reason);
+        return;
+      }
       toast.success("Transfer pack added to your account.");
       void queryClient.invalidateQueries({ queryKey: ["billing"] });
       void navigate({ to: "/wallet" });
     },
     onError: (error) => {
-      setPendingId(null);
       toast.error(error instanceof Error ? error.message : "Payment could not be completed.");
     },
   });
@@ -100,14 +87,14 @@ function PricingPage() {
       if (!result.ok) throw new Error(result.message);
       return result.data;
     },
+    onSettled: () => setPendingId(null),
     onSuccess: () => {
-      setPendingId(null);
+      clearProblem();
       toast.success("Paid from wallet. Your transfer pack is ready.");
       void queryClient.invalidateQueries({ queryKey: ["billing"] });
       void navigate({ to: "/wallet" });
     },
     onError: (error) => {
-      setPendingId(null);
       toast.error(error instanceof Error ? error.message : "Wallet payment failed.");
     },
   });
@@ -122,6 +109,9 @@ function PricingPage() {
     if (mode === "direct") payDirect.mutate(pack);
     else payWallet.mutate(pack);
   }
+
+  const failedPack = problem?.request.planId ? findPack(problem.request.planId) : null;
+  const retrying = payDirect.isPending || payWallet.isPending;
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6">
